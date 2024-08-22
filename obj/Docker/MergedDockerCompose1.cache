@@ -1,0 +1,297 @@
+name: dockercompose1553593541236330678
+services:
+  basket.api:
+    build:
+      context: E:\2024kaizen\eShopping-master
+      dockerfile: Services/Basket/Basket.API/Dockerfile
+    container_name: basket.api
+    depends_on:
+      basketdb:
+        condition: service_started
+        required: true
+      rabbitmq:
+        condition: service_started
+        required: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      CacheSettings__ConnectionString: basketdb:6379
+      ElasticConfiguration__Uri: http://elasticsearch:9200
+      EventBusSettings__HostAddress: amqp://guest:guest@rabbitmq:5672
+      GrpcSettings__DiscountUrl: http://discount.api
+    image: basketapi
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "9001"
+        protocol: tcp
+  basketdb:
+    container_name: basketdb
+    image: redis:alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 6379
+        published: "6379"
+        protocol: tcp
+    restart: always
+  catalog.api:
+    build:
+      context: E:\2024kaizen\eShopping-master
+      dockerfile: Services/Catalog/Catalog.API/Dockerfile
+    container_name: catalog.api
+    depends_on:
+      catalogdb:
+        condition: service_started
+        required: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DatabaseSettings__BrandsCollection: Brands
+      DatabaseSettings__CollectionName: Products
+      DatabaseSettings__ConnectionString: mongodb://catalogdb:27017
+      DatabaseSettings__DatabaseName: CatalogDb
+      DatabaseSettings__TypesCollection: Types
+      ElasticConfiguration__Uri: http://elasticsearch:9200
+    image: catalogapi
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "9000"
+        protocol: tcp
+  catalogdb:
+    container_name: catalogdb
+    image: mongo
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 27017
+        published: "27017"
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: volume
+        source: mongo_data
+        target: /data/db
+        volume: {}
+  discount.api:
+    build:
+      context: E:\2024kaizen\eShopping-master
+      dockerfile: Services/Discount/Discount.API/Dockerfile
+    container_name: discount.api
+    depends_on:
+      discountdb:
+        condition: service_started
+        required: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DatabaseSettings__ConnectionString: Server=discountdb;Port=5432;Database=DiscountDb;User Id=admin;Password=Password@1;
+      ElasticConfiguration__Uri: http://elasticsearch:9200
+    image: discountapi
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "9002"
+        protocol: tcp
+  discountdb:
+    container_name: discountdb
+    environment:
+      POSTGRES_DB: DiscountDb
+      POSTGRES_PASSWORD: Password@1
+      POSTGRES_USER: admin
+    image: postgres
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5432
+        published: "5432"
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: volume
+        source: postgres_data
+        target: /var/lib/postgresql/data
+        volume: {}
+  elasticsearch:
+    container_name: elasticsearch
+    environment:
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      discovery.type: single-node
+      xpack.monitoring.enabled: "true"
+      xpack.watcher.enabled: "false"
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.9.2
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 9200
+        published: "9200"
+        protocol: tcp
+    volumes:
+      - type: volume
+        source: elasticsearch-data
+        target: /usr/share/elasticsearch/data
+        volume: {}
+  kibana:
+    container_name: kibana
+    depends_on:
+      elasticsearch:
+        condition: service_started
+        required: true
+    environment:
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+    image: docker.elastic.co/kibana/kibana:7.9.2
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5601
+        published: "5601"
+        protocol: tcp
+  ocelotapigw:
+    build:
+      context: E:\2024kaizen\eShopping-master
+      dockerfile: ApiGateways/Ocelot.ApiGateway/Dockerfile
+    container_name: ocelotapigw
+    depends_on:
+      basket.api:
+        condition: service_started
+        required: true
+      catalog.api:
+        condition: service_started
+        required: true
+      discount.api:
+        condition: service_started
+        required: true
+      ordering.api:
+        condition: service_started
+        required: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+    image: ocelotapigw
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "9010"
+        protocol: tcp
+  orderdb:
+    container_name: orderdb
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: Rahul1234567
+    image: mcr.microsoft.com/mssql/server:2017-latest
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 1433
+        published: "1433"
+        protocol: tcp
+    restart: always
+  ordering.api:
+    build:
+      context: E:\2024kaizen\eShopping-master
+      dockerfile: Services/Ordering/Ordering.API/Dockerfile
+    container_name: ordering.api
+    depends_on:
+      orderdb:
+        condition: service_started
+        required: true
+      rabbitmq:
+        condition: service_started
+        required: true
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__OrderingConnectionString: Server=orderdb;Database=OrderDb;User Id=sa;Password=Rahul1234567
+      ElasticConfiguration__Uri: http://elasticsearch:9200
+      EventBusSettings__HostAddress: amqp://guest:guest@rabbitmq:5672
+    image: orderingapi
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "9003"
+        protocol: tcp
+  pgadmin:
+    container_name: pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@eShopping.net
+      PGADMIN_DEFAULT_PASSWORD: Password@1
+    image: dpage/pgadmin4
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 80
+        published: "5050"
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: volume
+        source: pgadmin_data
+        target: /root/.pgadmin
+        volume: {}
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 8000
+        published: "8080"
+        protocol: tcp
+      - mode: ingress
+        target: 9000
+        published: "9090"
+        protocol: tcp
+    restart: always
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+        bind:
+          create_host_path: true
+      - type: volume
+        source: portainer_data
+        target: /data
+        volume: {}
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3-management-alpine
+    networks:
+      default: null
+    ports:
+      - mode: ingress
+        target: 5672
+        published: "5672"
+        protocol: tcp
+      - mode: ingress
+        target: 15672
+        published: "15672"
+        protocol: tcp
+    restart: always
+networks:
+  default:
+    name: dockercompose1553593541236330678_default
+volumes:
+  elasticsearch-data:
+    name: dockercompose1553593541236330678_elasticsearch-data
+  mongo_data:
+    name: dockercompose1553593541236330678_mongo_data
+  pgadmin_data:
+    name: dockercompose1553593541236330678_pgadmin_data
+  portainer_data:
+    name: dockercompose1553593541236330678_portainer_data
+  postgres_data:
+    name: dockercompose1553593541236330678_postgres_data
